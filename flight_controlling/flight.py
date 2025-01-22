@@ -123,6 +123,22 @@ def mission_execution():
         time.sleep(1)
     print("Görev tamamlandı!")
 
+# Kendi ekseninde dönüş fonksiyonu
+def rotate(angle, speed):
+    print(f"{angle} derece dönülüyor...")
+    msg = vehicle.message_factory.command_long_encode(
+        0, 0,  # target system, target component(default)
+        mavutil.mavlink.MAV_CMD_CONDITION_YAW,
+        0,  # confirmation(default)
+        angle,  #  dönme açısı
+        speed,  # dönme hızı (saniyedeki dönüş açısı)
+        1 if angle > 0 else -1,  # yön (1: saat yönünde, -1: saat yönünün tersine)
+        1,  # relative (1: relative(şu anki duruma göre), 0: absolute))
+        0, 0, 0  # 5-7: boş
+    )
+    vehicle.send_mavlink(msg)
+    time.sleep(abs(angle) / speed) #Dönme süresi
+    print(f"{angle} derece dönme işlemi tamamlandı.")
 
 # Görev başlatma
 try:
