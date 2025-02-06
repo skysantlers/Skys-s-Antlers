@@ -10,7 +10,7 @@
 - Link: [VEDAI Dataset](https://downloads.greyc.fr/vedai/)
 
 4. VisDrone Dataset
-- Link: [VisDrone Dataset](https://github.com/VisDrone/VisDrone-Dataset)
+- Link: [VisDrone Dataset](https://www.kaggle.com/datasets/kushagrapandya/visdrone-dataset)
 
 5. UAVDT Dataset
 - Link: [UAVDT Dataset](https://datasetninja.com/uavdt)
