@@ -3,8 +3,8 @@
 1. Stanford Drone Dataset
 - Link: [Stanford Drone Dataset](https://www.kaggle.com/datasets/brendanalvey/stanford-drone-dataset)
 
-2. Xiaofei Liu Dataset
-- Link: [Xiaofei Liu Dataset](https://shanxiliuxiaofei.github.io)
+2. NPU_CS_UAV_IR_DATA
+- Link: [NPU_CS_UAV_IR_DATA](https://shanxiliuxiaofei.github.io)
 
 3. VEDAI Dataset
 - Link: [VEDAI Dataset](https://downloads.greyc.fr/vedai/)
