@@ -5,142 +5,16 @@ from PIL import Image, ImageTk
 import time
 import requests
 
-# Donanım modülleri (Eğer yüklü değilse dummy sınıflar kullanılacak)
-try:
-    import Adafruit_DHT
-except ImportError:
-
-    class DummyAdafruitDHT:
-        DHT22 = None
-
-        @staticmethod
-        def read_retry(sensor, pin):
-            return (50.0, 25.0)  # humidity, temperature
-
-    Adafruit_DHT = DummyAdafruitDHT
-
-try:
-    import board
-    import busio
-except ImportError:
-
-    class DummyBoard:
-        SCL = None
-        SDA = None
-
-    board = DummyBoard()
-    busio = None
-
-try:
-    import adafruit_bmp280
-except ImportError:
-
-    class DummyBMP280:
-        pressure = 1013.25
-
-    adafruit_bmp280 = type(
-        "dummy", (), {"Adafruit_BMP280_I2C": lambda i2c: DummyBMP280()}
-    )
-
-try:
-    import smbus2
-except ImportError:
-
-    class DummySMBus:
-        def __init__(self, bus):
-            pass
-
-        def write_byte_data(self, addr, reg, value):
-            pass
-
-        def read_byte_data(self, addr, reg):
-            return 0
-
-    smbus2 = type("dummy", (), {"SMBus": DummySMBus})
+# Gerçek sensör kütüphaneleri
+import Adafruit_DHT
+import board
+import busio
+import adafruit_bmp280
+import smbus2
 
 # Gerçek drone kontrolü için DroneKit kullanımı
-try:
-    from dronekit import connect, VehicleMode, LocationGlobalRelative
-    from pymavlink import mavutil
-except ImportError:
-    # Dummy tanımlamalar: Drone bağlantısı simüle edilecektir.
-    def connect(connection_string, baud, wait_ready):
-        print("Dummy drone bağlantısı yapıldı.")
-        return DummyVehicle()
-
-    class VehicleMode:
-        def __init__(self, mode):
-            self.mode = mode
-
-    class mavutil:
-        class mavlink:
-            MAV_CMD_CONDITION_YAW = 0
-
-
-# --------------------------------------------------------
-# Dummy Fonksiyonlar (Sensörler için)
-# --------------------------------------------------------
-def read_weight_sensor():
-    # HX711 gibi sensör için dummy okuma
-    return 1.0  # kilogram cinsinden örnek değer
-
-
-def read_lidar_sensor():
-    # LiDAR sensörü için dummy okuma
-    return 2.0  # metre cinsinden örnek değer
-
-
-# --------------------------------------------------------
-# Dummy Drone Sınıfı (Donanım yoksa simülasyon için)
-# --------------------------------------------------------
-class DummyLocation:
-    def __init__(self):
-        self.global_relative_frame = self
-        self.alt = 0.0
-
-
-class DummyMessageFactory:
-    def set_position_target_local_ned_encode(
-        self,
-        time_boot_ms,
-        target_system,
-        target_component,
-        coordinate_frame,
-        type_mask,
-        x,
-        y,
-        z,
-        vx,
-        vy,
-        vz,
-        afx,
-        afy,
-        afz,
-        yaw,
-        yaw_rate,
-    ):
-        # Basit bir sözlük döndür
-        return {"vx": vx, "vy": vy, "vz": vz}
-
-
-class DummyVehicle:
-    def __init__(self):
-        self.is_armable = True
-        self.armed = False
-        self.mode = None
-        self.location = DummyLocation()
-        self.message_factory = DummyMessageFactory()
-
-    def simple_takeoff(self, target_altitude):
-        # Hızlıca hedef yüksekliğe ulaş
-        self.location.alt = target_altitude
-        print(f"Dummy takeoff: hedef yükseklik {target_altitude} m")
-
-    def send_mavlink(self, msg):
-        print("Mavlink mesajı gönderildi:", msg)
-
-    def close(self):
-        print("Dummy drone bağlantısı kapatıldı.")
+from dronekit import connect, VehicleMode, LocationGlobalRelative
+from pymavlink import mavutil
 
 
 # --------------------------------------------------------
@@ -153,10 +27,7 @@ class AdditionalSensors:
         self.DHT_PIN = 4  # Raspberry Pi GPIO4 örneği
 
         # BMP280: Basınç sensörü
-        if busio is not None:
-            i2c = busio.I2C(board.SCL, board.SDA)
-        else:
-            i2c = None
+        i2c = busio.I2C(board.SCL, board.SDA)
         self.bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
 
         # MPU6050: İvmeölçer
@@ -164,41 +35,31 @@ class AdditionalSensors:
         self.mpu_addr = 0x68
         self.bus.write_byte_data(self.mpu_addr, 0x6B, 0)  # Uyandırma
 
+        # Ağırlık sensörü (HX711) ve LiDAR sensörü için placeholder fonksiyonlar:
+        # Bu fonksiyonları kullandığınız donanıma uygun şekilde implement edin.
+
     def read_weight(self):
         try:
-            weight = read_weight_sensor()  # Dummy fonksiyon kullanılıyor
+            weight = read_weight_sensor()  # Kendi HX711 okuma fonksiyonunuzu yazın.
             return weight
         except Exception as e:
             return None
 
     def read_temperature_and_humidity(self):
-        try:
-            humidity, temperature = Adafruit_DHT.read_retry(
-                self.DHT_SENSOR, self.DHT_PIN
-            )
-            if humidity is None or temperature is None:
-                raise ValueError("Sensör okuması başarısız")
-        except Exception:
-            temperature, humidity = 25.0, 50.0  # Dummy değerler
+        humidity, temperature = Adafruit_DHT.read_retry(self.DHT_SENSOR, self.DHT_PIN)
         return temperature, humidity
 
     def read_pressure(self):
-        try:
-            return self.bmp280.pressure
-        except Exception:
-            return 1013.25
+        return self.bmp280.pressure
 
     def read_acceleration(self):
         def read_word(reg):
-            try:
-                high = self.bus.read_byte_data(self.mpu_addr, reg)
-                low = self.bus.read_byte_data(self.mpu_addr, reg + 1)
-                value = (high << 8) + low
-                if value >= 0x8000:
-                    value = -((65535 - value) + 1)
-                return value
-            except Exception:
-                return 0
+            high = self.bus.read_byte_data(self.mpu_addr, reg)
+            low = self.bus.read_byte_data(self.mpu_addr, reg + 1)
+            value = (high << 8) + low
+            if value >= 0x8000:
+                value = -((65535 - value) + 1)
+            return value
 
         accel_x = read_word(0x3B) / 16384.0
         accel_y = read_word(0x3D) / 16384.0
@@ -207,7 +68,7 @@ class AdditionalSensors:
 
     def read_lidar_distance(self):
         try:
-            distance = read_lidar_sensor()  # Dummy fonksiyon kullanılıyor
+            distance = read_lidar_sensor()  # Kendi LiDAR okuma fonksiyonunuzu yazın.
             return distance
         except Exception as e:
             return None
@@ -218,12 +79,8 @@ class AdditionalSensors:
 # --------------------------------------------------------
 class DroneController:
     def __init__(self, connection_string="/dev/ttyAMA0", baud=57600):
-        print("Drone bağlantısı kuruluyor...")
-        try:
-            self.vehicle = connect(connection_string, baud=baud, wait_ready=True)
-        except Exception as e:
-            print("Gerçek drone bağlantısı başarısız, simülasyon modu devreye giriyor.")
-            self.vehicle = DummyVehicle()
+        print("Gerçek drone bağlantısı kuruluyor...")
+        self.vehicle = connect(connection_string, baud=baud, wait_ready=True)
 
     def connect_drone(self):
         # DroneKit bağlantısı __init__ sırasında sağlanmıştır.
@@ -239,13 +96,11 @@ class DroneController:
         while not self.vehicle.armed:
             print("Drone arm ediliyor...")
             time.sleep(1)
-            # Simülasyonda hemen arm yapılıyor
-            self.vehicle.armed = True
         print("Kalkış yapılıyor...")
         self.vehicle.simple_takeoff(target_altitude)
         while True:
             alt = self.vehicle.location.global_relative_frame.alt
-            print("Mevcut Yükseklik: ", alt)
+            print("Mevcut Yükseklik:", alt)
             if alt >= target_altitude * 0.95:
                 print("Hedef yüksekliğe ulaşıldı.")
                 break
@@ -299,10 +154,20 @@ class DroneController:
             print("Bilinmeyen hareket komutu:", direction)
 
     def turn_by_angle(self, angle):
-        # Yaw kontrolü: Aşağıdaki mavlink mesajı ile göreceli yaw ayarlanır.
+        # Yaw kontrolü: Göreceli dönüş
         is_relative = 1  # göreceli dönüş
-        msg = self.vehicle.message_factory.set_position_target_local_ned_encode(
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, angle, 0
+        msg = self.vehicle.message_factory.command_long_encode(
+            0,
+            0,
+            mavutil.mavlink.MAV_CMD_CONDITION_YAW,
+            0,
+            angle,  # hedef açı
+            10,     # hız (derece/s)
+            1,      # yön (1 = saat yönünde)
+            is_relative,
+            0,
+            0,
+            0,
         )
         self.vehicle.send_mavlink(msg)
         time.sleep(3)
@@ -318,13 +183,8 @@ class DroneController:
         print("İniş komutu gönderiliyor...")
         self.vehicle.mode = VehicleMode("LAND")
         while self.vehicle.armed:
-            print(
-                "Drone iniyor, mevcut yükseklik:",
-                self.vehicle.location.global_relative_frame.alt,
-            )
+            print("Drone iniyor, mevcut yükseklik:", self.vehicle.location.global_relative_frame.alt)
             time.sleep(1)
-            # Simülasyonda hemen iniş gerçekleşsin
-            self.vehicle.armed = False
         print("Drone indi.")
 
     def disconnect(self):
@@ -349,19 +209,13 @@ class DroneGUI:
         self.video_label.grid(row=0, column=0, columnspan=4, padx=10, pady=10)
 
         # Üst kontrol butonları
-        self.connect_button = tk.Button(
-            root, text="Drone Bağlan", width=20, command=self.connect_drone
-        )
+        self.connect_button = tk.Button(root, text="Drone Bağlan", width=20, command=self.connect_drone)
         self.connect_button.grid(row=1, column=0, padx=5, pady=5)
 
-        self.autonomous_button = tk.Button(
-            root, text="Otonom Sürüş Başlat", width=20, command=self.start_autonomous
-        )
+        self.autonomous_button = tk.Button(root, text="Otonom Sürüş Başlat", width=20, command=self.start_autonomous)
         self.autonomous_button.grid(row=1, column=1, padx=5, pady=5)
 
-        self.manual_button = tk.Button(
-            root, text="Manuel Sürüş Başlat", width=20, command=self.start_manual
-        )
+        self.manual_button = tk.Button(root, text="Manuel Sürüş Başlat", width=20, command=self.start_manual)
         self.manual_button.grid(row=1, column=2, padx=5, pady=5)
 
         self.stop_button = tk.Button(root, text="Durdur", width=20, command=self.stop)
@@ -371,66 +225,27 @@ class DroneGUI:
         self.land_button = tk.Button(root, text="İniş", width=20, command=self.land)
         self.land_button.grid(row=4, column=0, padx=5, pady=5)
 
-        self.disconnect_button = tk.Button(
-            root, text="Drone Bağlantısını Kes", width=20, command=self.disconnect_drone
-        )
+        self.disconnect_button = tk.Button(root, text="Drone Bağlantısını Kes", width=20, command=self.disconnect_drone)
         self.disconnect_button.grid(row=4, column=1, padx=5, pady=5)
 
-        # Manuel kontrol: 8 yönlü butonlar
+        # Manuel kontrol: 3x3 ızgara (merkez boş bırakıldı)
         self.manual_frame = tk.Frame(root)
         self.manual_frame.grid(row=2, column=0, columnspan=4, padx=10, pady=10)
-        self.btn_up_left = tk.Button(
-            self.manual_frame,
-            text="↖",
-            width=5,
-            command=lambda: self.manual_control("up_left"),
-        )
-        self.btn_up = tk.Button(
-            self.manual_frame,
-            text="↑",
-            width=5,
-            command=lambda: self.manual_control("up"),
-        )
-        self.btn_up_right = tk.Button(
-            self.manual_frame,
-            text="↗",
-            width=5,
-            command=lambda: self.manual_control("up_right"),
-        )
-        self.btn_left = tk.Button(
-            self.manual_frame,
-            text="←",
-            width=5,
-            command=lambda: self.manual_control("left"),
-        )
-        self.btn_right = tk.Button(
-            self.manual_frame,
-            text="→",
-            width=5,
-            command=lambda: self.manual_control("right"),
-        )
-        self.btn_down_left = tk.Button(
-            self.manual_frame,
-            text="↙",
-            width=5,
-            command=lambda: self.manual_control("down_left"),
-        )
-        self.btn_down = tk.Button(
-            self.manual_frame,
-            text="↓",
-            width=5,
-            command=lambda: self.manual_control("down"),
-        )
-        self.btn_down_right = tk.Button(
-            self.manual_frame,
-            text="↘",
-            width=5,
-            command=lambda: self.manual_control("down_right"),
-        )
+        self.btn_up_left = tk.Button(self.manual_frame, text="↖", width=5, command=lambda: self.manual_control("up_left"))
+        self.btn_up = tk.Button(self.manual_frame, text="↑", width=5, command=lambda: self.manual_control("up"))
+        self.btn_up_right = tk.Button(self.manual_frame, text="↗", width=5, command=lambda: self.manual_control("up_right"))
+        self.btn_left = tk.Button(self.manual_frame, text="←", width=5, command=lambda: self.manual_control("left"))
+        self.btn_right = tk.Button(self.manual_frame, text="→", width=5, command=lambda: self.manual_control("right"))
+        self.btn_down_left = tk.Button(self.manual_frame, text="↙", width=5, command=lambda: self.manual_control("down_left"))
+        self.btn_down = tk.Button(self.manual_frame, text="↓", width=5, command=lambda: self.manual_control("down"))
+        self.btn_down_right = tk.Button(self.manual_frame, text="↘", width=5, command=lambda: self.manual_control("down_right"))
+
+        # 3x3 ızgara yerleşimi (merkez boş)
         self.btn_up_left.grid(row=0, column=0, padx=5, pady=5)
         self.btn_up.grid(row=0, column=1, padx=5, pady=5)
         self.btn_up_right.grid(row=0, column=2, padx=5, pady=5)
         self.btn_left.grid(row=1, column=0, padx=5, pady=5)
+        # Merkez hücre boş bırakıldı.
         self.btn_right.grid(row=1, column=2, padx=5, pady=5)
         self.btn_down_left.grid(row=2, column=0, padx=5, pady=5)
         self.btn_down.grid(row=2, column=1, padx=5, pady=5)
@@ -443,12 +258,8 @@ class DroneGUI:
         self.info_text.insert(tk.END, "Sistem başlatıldı...\n")
 
         # Telemetri alanı
-        self.telemetry_label = tk.Label(
-            root, text="Telemetri: Bekleniyor...", justify="left", font=("Courier", 10)
-        )
-        self.telemetry_label.grid(
-            row=5, column=0, columnspan=4, padx=10, pady=10, sticky="w"
-        )
+        self.telemetry_label = tk.Label(root, text="Telemetri: Bekleniyor...", justify="left", font=("Courier", 10))
+        self.telemetry_label.grid(row=5, column=0, columnspan=4, padx=10, pady=10, sticky="w")
 
         # Video yakalama (kamera)
         self.cap = cv2.VideoCapture(0)
@@ -493,12 +304,8 @@ class DroneGUI:
         accel = self.additional_sensors.read_acceleration()
         weight = self.additional_sensors.read_weight()
         lidar = self.additional_sensors.read_lidar_distance()
-        telemetry_str = (
-            f"Control Mode: {self.mode if self.mode is not None else 'None'}\n"
-        )
-        telemetry_str += (
-            f"Temperature: {temperature:.2f} °C, Humidity: {humidity:.2f} %\n"
-        )
+        telemetry_str = f"Control Mode: {self.mode if self.mode is not None else 'None'}\n"
+        telemetry_str += f"Temperature: {temperature:.2f} °C, Humidity: {humidity:.2f} %\n"
         telemetry_str += f"Pressure: {pressure:.2f} hPa\n"
         telemetry_str += f"Acceleration: ax: {accel[0]:.2f}, ay: {accel[1]:.2f}, az: {accel[2]:.2f}\n"
         telemetry_str += f"Weight: {weight}\n"
@@ -511,9 +318,12 @@ class DroneGUI:
         self.hide_manual_controls()
         self.info_text.insert(tk.END, "Otonom sürüş başlatıldı...\n")
         try:
+            # İlk olarak 50 metre yüksekliğe kalkış
             self.controller.arm_and_takeoff(50)
+            # Mevcut check_intersection ve check_crowd fonksiyonlarını çalıştırmaya devam ediyoruz
             self.check_intersection_api()
             self.check_crowd_api()
+            # Ek olarak sürekli yol tespiti için check_path_api çalıştırılıyor
             self.check_path_api()
         except Exception as e:
             self.info_text.insert(tk.END, f"Kalkış sırasında hata: {e}\n")
@@ -549,33 +359,22 @@ class DroneGUI:
             self.root.after(1000, self.check_intersection_api)
             return
         try:
-            response = requests.get(
-                "http://localhost:5000/check_intersection", timeout=1
-            )
+            response = requests.get("http://localhost:5000/check_intersection", timeout=1)
             if response.status_code == 200:
                 data = response.json()
                 if data.get("four_way_intersection", False):
-                    self.info_text.insert(
-                        tk.END, "4'lü kavşak tespit edildi! Drone durduruluyor...\n"
-                    )
+                    self.info_text.insert(tk.END, "4'lü kavşak tespit edildi! Drone durduruluyor...\n")
                     self.controller.stop()
-                    details_response = requests.get(
-                        "http://localhost:5000/intersection_details", timeout=1
-                    )
+                    details_response = requests.get("http://localhost:5000/intersection_details", timeout=1)
                     if details_response.status_code == 200:
                         details = details_response.json()
                         angle = details.get("angle")
                         distance = details.get("distance")
-                        self.info_text.insert(
-                            tk.END,
-                            f"Kavşak merkezi detayları: Açısı = {angle:.2f}, Mesafe = {distance:.2f}\n",
-                        )
+                        self.info_text.insert(tk.END, f"Kavşak merkezi detayları: Açısı = {angle:.2f}, Mesafe = {distance:.2f}\n")
                         self.controller.turn_by_angle(angle)
                         self.controller.move_distance(distance)
                     else:
-                        self.info_text.insert(
-                            tk.END, "Intersection details API hatalı.\n"
-                        )
+                        self.info_text.insert(tk.END, "Intersection details API hatalı.\n")
         except Exception as e:
             self.info_text.insert(tk.END, f"Intersection API hatası: {e}\n")
         self.root.after(1000, self.check_intersection_api)
@@ -591,10 +390,7 @@ class DroneGUI:
                 if data.get("crowd_found", False):
                     angle = data.get("angle")
                     distance = data.get("distance")
-                    self.info_text.insert(
-                        tk.END,
-                        f"Kalabalık alan tespit edildi: Açısı = {angle:.2f}, Mesafe = {distance:.2f}. Drone yönlendiriliyor.\n",
-                    )
+                    self.info_text.insert(tk.END, f"Kalabalık alan tespit edildi: Açısı = {angle:.2f}, Mesafe = {distance:.2f}. Drone yönlendiriliyor.\n")
                     self.controller.turn_by_angle(angle)
                     self.controller.move_distance(distance)
         except Exception as e:
@@ -617,21 +413,17 @@ class DroneGUI:
                 data = response.json()
                 angle = data.get("angle")
                 distance = data.get("distance")
-                self.info_text.insert(
-                    tk.END,
-                    f"Yol tespiti: Açısı = {angle:.2f}, Mesafe = {distance:.2f}\n",
-                )
+                self.info_text.insert(tk.END, f"Yol tespiti: Açısı = {angle:.2f}, Mesafe = {distance:.2f}\n")
                 self.controller.turn_by_angle(angle)
                 self.controller.move_distance(distance)
         except Exception as e:
             self.info_text.insert(tk.END, f"Path API hatası: {e}\n")
-
         self.root.after(1000, self.check_path_api)
 
 
 if __name__ == "__main__":
     root = tk.Tk()
-    controller = DroneController()  # Gerçek veya dummy drone bağlantısı yapılır.
+    controller = DroneController()  # Gerçek drone bağlantısı yapılır.
     app = DroneGUI(root, controller)
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
     root.mainloop()
