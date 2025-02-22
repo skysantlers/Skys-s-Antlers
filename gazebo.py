@@ -4,13 +4,7 @@ import cv2
 from PIL import Image, ImageTk
 import time
 import requests
-
-# Gerçek sensör kütüphaneleri
-import Adafruit_DHT
-import board
-import busio
-import adafruit_bmp280
-import smbus2
+import random
 
 # Gerçek drone kontrolü için DroneKit kullanımı
 from dronekit import connect, VehicleMode, LocationGlobalRelative
@@ -18,178 +12,114 @@ from pymavlink import mavutil
 
 
 # --------------------------------------------------------
-# Gerçek Sensör Entegrasyonu (AdditionalSensors)
+# Simülasyon Sensör Entegrasyonu (AdditionalSensors)
 # --------------------------------------------------------
 class AdditionalSensors:
     def __init__(self):
-        # DHT22: Sıcaklık ve nem için
-        self.DHT_SENSOR = Adafruit_DHT.DHT22
-        self.DHT_PIN = 4  # Raspberry Pi GPIO4 örneği
-
-        # BMP280: Basınç sensörü
-        i2c = busio.I2C(board.SCL, board.SDA)
-        self.bmp280 = adafruit_bmp280.Adafruit_BMP280_I2C(i2c)
-
-        # MPU6050: İvmeölçer
-        self.bus = smbus2.SMBus(1)
-        self.mpu_addr = 0x68
-        self.bus.write_byte_data(self.mpu_addr, 0x6B, 0)  # Uyandırma
-
-        # Ağırlık sensörü (HX711) ve LiDAR sensörü için placeholder fonksiyonlar:
-        # Bu fonksiyonları kullandığınız donanıma uygun şekilde implement edin.
+        # Simülasyon için sabit veya rastgele değerler üretilecek.
+        pass
 
     def read_weight(self):
-        try:
-            weight = read_weight_sensor()  # Kendi HX711 okuma fonksiyonunuzu yazın.
-            return weight
-        except Exception as e:
-            return None
+        # Örneğin 100-500 gram arasında rastgele bir değer.
+        return round(random.uniform(100, 500), 2)
 
     def read_temperature_and_humidity(self):
-        humidity, temperature = Adafruit_DHT.read_retry(self.DHT_SENSOR, self.DHT_PIN)
+        # Sıcaklık 20-30 °C, nem 40-60 % arasında rastgele değerler
+        temperature = round(random.uniform(20, 30), 2)
+        humidity = round(random.uniform(40, 60), 2)
         return temperature, humidity
 
     def read_pressure(self):
-        return self.bmp280.pressure
+        # Örneğin 990-1020 hPa arasında rastgele bir değer.
+        return round(random.uniform(990, 1020), 2)
 
     def read_acceleration(self):
-        def read_word(reg):
-            high = self.bus.read_byte_data(self.mpu_addr, reg)
-            low = self.bus.read_byte_data(self.mpu_addr, reg + 1)
-            value = (high << 8) + low
-            if value >= 0x8000:
-                value = -((65535 - value) + 1)
-            return value
-
-        accel_x = read_word(0x3B) / 16384.0
-        accel_y = read_word(0x3D) / 16384.0
-        accel_z = read_word(0x3F) / 16384.0
-        return accel_x, accel_y, accel_z
+        # Basitçe x,y için -1 ile 1 arasında ve z için 9.5-10.5 (yerçekimi)
+        ax = round(random.uniform(-1, 1), 2)
+        ay = round(random.uniform(-1, 1), 2)
+        az = round(random.uniform(9.5, 10.5), 2)
+        return ax, ay, az
 
     def read_lidar_distance(self):
-        try:
-            distance = read_lidar_sensor()  # Kendi LiDAR okuma fonksiyonunuzu yazın.
-            return distance
-        except Exception as e:
-            return None
+        # Örneğin 0.5-10 metre arasında rastgele mesafe
+        return round(random.uniform(0.5, 10), 2)
 
 
 # --------------------------------------------------------
-# Gerçek Drone Kontrolü (DroneController)
+# Gerçek Drone Kontrolü (DroneController) - Simülasyon modunda çalışıyor
 # --------------------------------------------------------
 class DroneController:
-    def __init__(self, connection_string="/dev/ttyAMA0", baud=57600):
-        print("Gerçek drone bağlantısı kuruluyor...")
-        self.vehicle = connect(connection_string, baud=baud, wait_ready=True)
+    def __init__(self, connection_string="127.0.0.1:14550", baud=57600):
+        print("Simülasyon modu: Gerçek drone bağlantısı kurulmayacak.")
+        # Simülasyon modunda gerçek bağlantı yapılmayacak, sadece mesajlar gösterilecek.
+        self.vehicle = None
 
     def connect_drone(self):
-        # DroneKit bağlantısı __init__ sırasında sağlanmıştır.
-        print("Drone bağlantısı başarılı.")
+        print("Simülasyon: Drone bağlantısı başarılı.")
 
     def arm_and_takeoff(self, target_altitude):
-        print("Drone arm edilebilir durumda mı kontrol ediliyor...")
-        while not self.vehicle.is_armable:
-            print("Drone arm edilebilir durumda değil...")
-            time.sleep(1)
-        self.vehicle.mode = VehicleMode("GUIDED")
-        self.vehicle.armed = True
-        while not self.vehicle.armed:
-            print("Drone arm ediliyor...")
-            time.sleep(1)
-        print("Kalkış yapılıyor...")
-        self.vehicle.simple_takeoff(target_altitude)
-        while True:
-            alt = self.vehicle.location.global_relative_frame.alt
-            print("Mevcut Yükseklik:", alt)
-            if alt >= target_altitude * 0.95:
-                print("Hedef yüksekliğe ulaşıldı.")
-                break
-            time.sleep(1)
+        print("Simülasyon: Drone arm ediliyor ve kalkış yapılıyor...")
+        time.sleep(2)
+        print(f"Simülasyon: {target_altitude} metre yüksekliğe ulaşıldı.")
 
     def send_ned_velocity(self, velocity_x, velocity_y, velocity_z, duration=1):
-        msg = self.vehicle.message_factory.set_position_target_local_ned_encode(
-            0,
-            0,
-            0,
-            0b0000111111000111,  # Sadece hız bileşenlerini aktif
-            0,
-            0,
-            0,
-            velocity_x,
-            velocity_y,
-            velocity_z,
-            0,
-            0,
-            0,
-            0,
-            0,
-        )
-        for _ in range(int(duration)):
-            self.vehicle.send_mavlink(msg)
-            time.sleep(1)
+        print(f"Simülasyon: vx={velocity_x}, vy={velocity_y}, vz={velocity_z} ile {duration} sn hareket.")
+        time.sleep(duration)
 
     def move(self, direction):
         # Manuel kontrol için diagonal (ara) yönler de eklenmiştir.
         if direction == "forward":
+            print("Simülasyon: İleri hareket")
             self.send_ned_velocity(1, 0, 0)
         elif direction == "backward":
+            print("Simülasyon: Geri hareket")
             self.send_ned_velocity(-1, 0, 0)
         elif direction == "left":
+            print("Simülasyon: Sola hareket")
             self.send_ned_velocity(0, -1, 0)
         elif direction == "right":
+            print("Simülasyon: Sağa hareket")
             self.send_ned_velocity(0, 1, 0)
         elif direction == "up":
+            print("Simülasyon: Yukarı hareket")
             self.send_ned_velocity(0, 0, -1)
         elif direction == "down":
+            print("Simülasyon: Aşağı hareket")
             self.send_ned_velocity(0, 0, 1)
         elif direction == "up_left":
+            print("Simülasyon: Sol üst hareket")
             self.send_ned_velocity(1, -1, 0)
         elif direction == "up_right":
+            print("Simülasyon: Sağ üst hareket")
             self.send_ned_velocity(1, 1, 0)
         elif direction == "down_left":
+            print("Simülasyon: Sol alt hareket")
             self.send_ned_velocity(-1, -1, 0)
         elif direction == "down_right":
+            print("Simülasyon: Sağ alt hareket")
             self.send_ned_velocity(-1, 1, 0)
         else:
-            print("Bilinmeyen hareket komutu:", direction)
+            print("Simülasyon: Bilinmeyen hareket komutu:", direction)
 
     def turn_by_angle(self, angle):
-        # Yaw kontrolü: Göreceli dönüş
-        is_relative = 1  # göreceli dönüş
-        msg = self.vehicle.message_factory.command_long_encode(
-            0,
-            0,
-            mavutil.mavlink.MAV_CMD_CONDITION_YAW,
-            0,
-            angle,  # hedef açı
-            10,     # hız (derece/s)
-            1,      # yön (1 = saat yönünde)
-            is_relative,
-            0,
-            0,
-            0,
-        )
-        self.vehicle.send_mavlink(msg)
-        time.sleep(3)
+        print(f"Simülasyon: {angle:.2f} derece dönüyor.")
+        time.sleep(2)
 
     def move_distance(self, distance):
-        # 1 m/s hız varsayımıyla ileri hareket
+        print(f"Simülasyon: {distance:.2f} metre ilerliyor.")
         self.send_ned_velocity(1, 0, 0, duration=distance)
 
     def stop(self):
+        print("Simülasyon: Drone durdu.")
         self.send_ned_velocity(0, 0, 0)
 
     def land(self):
-        print("İniş komutu gönderiliyor...")
-        self.vehicle.mode = VehicleMode("LAND")
-        while self.vehicle.armed:
-            print("Drone iniyor, mevcut yükseklik:", self.vehicle.location.global_relative_frame.alt)
-            time.sleep(1)
-        print("Drone indi.")
+        print("Simülasyon: Drone inişe geçti.")
+        time.sleep(2)
+        print("Simülasyon: Drone indi.")
 
     def disconnect(self):
-        self.vehicle.close()
-        print("Drone bağlantısı kesildi.")
+        print("Simülasyon: Drone bağlantısı kesildi.")
 
 
 # --------------------------------------------------------
@@ -239,13 +169,12 @@ class DroneGUI:
         self.btn_down_left = tk.Button(self.manual_frame, text="↙", width=5, command=lambda: self.manual_control("down_left"))
         self.btn_down = tk.Button(self.manual_frame, text="↓", width=5, command=lambda: self.manual_control("down"))
         self.btn_down_right = tk.Button(self.manual_frame, text="↘", width=5, command=lambda: self.manual_control("down_right"))
-
-        # 3x3 ızgara yerleşimi (merkez boş)
+        # 3x3 ızgara yerleşimi (merkez hücre boş bırakıldı)
         self.btn_up_left.grid(row=0, column=0, padx=5, pady=5)
         self.btn_up.grid(row=0, column=1, padx=5, pady=5)
         self.btn_up_right.grid(row=0, column=2, padx=5, pady=5)
         self.btn_left.grid(row=1, column=0, padx=5, pady=5)
-        # Merkez hücre boş bırakıldı.
+        # Merkez boş
         self.btn_right.grid(row=1, column=2, padx=5, pady=5)
         self.btn_down_left.grid(row=2, column=0, padx=5, pady=5)
         self.btn_down.grid(row=2, column=1, padx=5, pady=5)
@@ -423,7 +352,7 @@ class DroneGUI:
 
 if __name__ == "__main__":
     root = tk.Tk()
-    controller = DroneController()  # Gerçek drone bağlantısı yapılır.
+    controller = DroneController()  # Simülasyon modunda çalışacak
     app = DroneGUI(root, controller)
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
     root.mainloop()
